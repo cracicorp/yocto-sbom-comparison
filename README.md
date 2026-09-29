@@ -14,14 +14,17 @@ Built on a native ARM64 runner with 32 vCPUs, Yocto Project 6.0 (Wrynose), `poky
 | Components the other SBOM does not have | **88** | 0 |
 | Rust crate versions listed | 653 | 653 |
 | Rust crates with a `pkg:cargo` package URL | **653** | 0 |
+| Rust crates and host packages monitorable by package URL | **Yes** (`pkg:cargo`, `pkg:deb`) | No |
 | Format | CycloneDX 1.7, one file | SPDX 3.0.1, 1,632 files |
 
 - **CRACI's SBOM contains every component in Yocto's SBOM, plus 88 more (10% more).** The extra components come from
   outside BitBake's metadata: 23 Ubuntu host packages on the build machine (such as `cpio`), 10 GitHub sources
   including the GitHub Action `actions/upload-artifact`, and 55 other sources and tools fetched during the build.
-- **Yocto lists its 653 Rust crate versions without a package URL.** Each crate appears only as a `.crate` file and a
-  crates.io download location inside the recipe that uses it. Vulnerability matching works on package URLs, so these
-  crates cannot be checked for vulnerabilities from Yocto's SBOM. CRACI records every crate as `pkg:cargo/...`.
+- **Yocto's SBOM cannot really be used for supply chain vulnerability monitoring.** Vulnerability monitoring matches
+  components to advisories by package URL (PURL). Yocto's SBOM gives its recipes Yocto-specific `pkg:yocto` URLs,
+  lists its 653 Rust crate versions only as `.crate` files and download locations, and has no entries at all for the
+  host packages. CRACI records the crates and host packages with the package URLs advisories are published against,
+  such as `pkg:cargo/...` and `pkg:deb/ubuntu/...`, so they can be monitored for vulnerabilities.
 - **The build with Yocto's SBOM generation and its source-detail options took 155 min 40 s. The build without them
   took 88 min 48 s, 43% less.** At CRACI's rate of €0.002 per vCPU-minute that is €9.96 against €5.68 per build.
 
@@ -125,7 +128,34 @@ does not list them.
 The full lists, including the 865 shared components, are in
 [`results/component-comparison.txt`](results/component-comparison.txt).
 
-### Rust crates and package URLs
+### Package URLs and vulnerability monitoring
+
+Tools that monitor an SBOM for vulnerabilities, such as SBOM platforms and vulnerability databases, identify each
+component by its package URL: `pkg:cargo/cairo-rs@0.21.2` for a Rust crate, `pkg:deb/ubuntu/cpio@...` for a Debian
+package. Advisories are published against those identifiers. A component without one, or with an identifier no
+advisory uses, cannot be matched, so a new vulnerability in it goes unreported.
+
+Package URLs across all 1,632 files of Yocto's SBOM, counted once each:
+
+| Package URL type | Count |
+| --- | --- |
+| `pkg:yocto` (Yocto-specific, one per recipe) | 347 |
+| `pkg:github` | 32 |
+| `pkg:pypi` | 10 |
+| `pkg:cargo` | 5 |
+| `pkg:cpan` | 2 |
+
+More than half of the 865 components have no package URL, and most of the rest have a Yocto-specific one. So
+Yocto's SBOM cannot really be used for supply chain vulnerability monitoring. Yocto's own `cve-check` class takes a
+separate route for recipes, matching them against NVD by CPE product name, but that covers what BitBake builds, not
+the Rust crates compiled into them or the tools on the build machine.
+
+CRACI's SBOM records the 653 Rust crate versions as `pkg:cargo`, the 25 host packages as `pkg:deb` and 43 GitHub
+sources as `pkg:github`. The upstream source tarballs and Git repositories BitBake fetched (345 components) are
+recorded as `pkg:generic` with their download location, which identifies exactly what was fetched but is not
+something advisories are published against either.
+
+### Rust crates
 
 Both SBOMs contain the same 653 versions of 559 Rust crates, for example `cairo-rs` and `zune-jpeg`, which `librsvg`
 compiles in. The difference is how they are identified:
